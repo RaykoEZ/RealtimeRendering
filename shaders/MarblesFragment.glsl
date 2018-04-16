@@ -103,50 +103,40 @@ float ground(vec3 p)
 // define sdf shapes here
 float shape(vec3 p)
 {
-    vec2 q;
-    vec3 d;
-    // switch is kept for future needs if need be.
-    switch(shapeType) {
-        case 1: // signed Ellipsoid
-            return sdfEllipsoid(p, ellipsoidR);
-        default: // A sphere
-            return sdfSphere(p,sphereR);
-    }
+    return sdfSphere(p,sphereR);
 
 }
-// Set shape animation
-void setShape(float index, out vec3 shapePos, out mat3 shapeDir)
-{
+
+/** The rotation of the shapes was taken from here https://www.shadertoy.com/view/XlXyD4 and forms the basis of
+  * the application.
+  */
+void setShape(float index, out vec3 shapePos, out mat3 shapeDir) {
     float t = tau * mod(index * 0.2 + 0.02 * time + 0.12, 1.0);
-    float a = 2.0*t;
-    float b = 3.0*t;
-    float c = 7.0 * t;
-    shapePos = vec3(1.8 * cos(b),  1.0 + sin(a), 1.8 * cos(c));
+    float a = 2.0;
+    float b = 3.0;
+    float c = 7.0;
+    shapePos = vec3(0, 1, 0);
     shapeDir = mat3(cos(a), -sin(a), 0.0, sin(a), cos(a), 0.0, 0.0, 0.0, 1.0);
     shapeDir *= mat3(cos(b), 0.0, -sin(b), 0.0, 1.0, 0.0, sin(b), 0.0, cos(b));
     shapeDir *= mat3(cos(c), -sin(c), 0.0, sin(c), cos(c), 0.0, 0.0, 0.0, 1.0);
 }
-/** This function initialises each shape in the scene. It is modified from https://www.shadertoy.com/view/XlXyD4
-  * to support an arbitrary number of shapes
-  */
-void setScene()
-{
-    float shapeRatio = 5.0 / float(shapeCount);
-    for (int i = 0; i < shapeCount; ++i)
-    {
-        setShape(float(i) * shapeRatio, shapePos[i], shapeDir[i]);
-    }
-}
+
 float scene(vec3 p)
 {
     float s = ground(p);
     for (int i = 0; i < shapeCount; ++i)
     {
-        s = min(s, shape(shapeDir[i] * (p - shapePos[i])));
+        s = min(s, shape(p));
     }
     return s;
 }
 
+void setScene() {
+
+    for (int i = 0; i < shapeCount; ++i) {
+        setShape(i, shapePos[i], shapeDir[i]);
+    }
+}
 /** This is where the magic happens. The algorithm was taken from https://www.shadertoy.com/view/XlXyD4  but it is
   * quite generic and was originally taken from (and explained rather well) here:
   * http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
@@ -254,15 +244,12 @@ vec3 Palette(in float t) {
 //-------------------------------------------------------------------------------------------
 void main ()
 {
-
     // Determine where the viewer is looking based on the provided eye position and scene target
     vec3 dir = ray(2.5, resolution.xy, gl_FragCoord.xy);
     mat3 mat = viewMatrix(lookAt - eyePos, vec3(0.0, 1.0, 0.0));
     vec3 eye = eyePos;
     dir = mat * dir;
-
     setScene();
-
     // March until it hits the object. The depth indicates how far you have to travel down dir to get to the object.
     float depth = march(eye, dir);
     //skip forward if no geometries near march range
