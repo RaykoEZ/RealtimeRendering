@@ -32,26 +32,26 @@ TrackballCamera::TrackballCamera() :
  * This is effectively a state machine which determines what we're currently doing. Changes to the
  * mouse behaviour would need to be done here.
  */
-void TrackballCamera::handleMouseClick(QMouseEvent *event) {
+void TrackballCamera::handleMouseClick(QMouseEvent *event, int action) {
     switch(m_state) {
     case TRACKBALL_PASSIVE:
-        if (action == GLFW_PRESS) {
-            m_lastX = event; m_lastY = mouseY;
-            if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == QEvent::MouseButtonPress) {
+            m_lastX = event->x(); m_lastY = event->y();
+            if (event->button() == Qt::LeftButton) {
                 m_state = TRACKBALL_ROTATING;
-            } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+            } else if (event->button() == Qt::RightButton) {
                 m_state = TRACKBALL_ZOOMING;
             }
         }
         break;
     case TRACKBALL_ROTATING:
-        if (action == GLFW_RELEASE && button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == QEvent::MouseButtonRelease && event->button() == Qt::LeftButton) {
             m_state = TRACKBALL_PASSIVE;
             m_lastYaw = m_yaw; m_lastPitch = m_pitch;
         }
         break;
     case TRACKBALL_ZOOMING:
-        if (action == GLFW_RELEASE && button == GLFW_MOUSE_BUTTON_RIGHT) {
+        if (action == QEvent::MouseButtonRelease && event->button() == Qt::RightButton) {
             m_state = TRACKBALL_PASSIVE;
         }
         break;
@@ -67,10 +67,10 @@ void TrackballCamera::handleMouseClick(QMouseEvent *event) {
 void TrackballCamera::handleMouseMove(QMouseEvent *event) {
     switch (m_state) {
     case TRACKBALL_ROTATING:
-        mouseRotate(event, mouseY);
+        mouseRotate(event->x(), event->y());
         break;
     case TRACKBALL_ZOOMING:
-        mouseZoom(event, mouseY);
+        mouseZoom(event->x(), event->y());
         break;
     default:
         break;
@@ -115,10 +115,10 @@ void TrackballCamera::mouseZoom(double mouseX, double mouseY) {
  * Note that in glm the matrix is constructed using quaternions - I could leave them in this form for the rotation.
  * In this case, the eye is rotated around the target
  */
-void TrackballCamera::update() {
+void TrackballCamera::updateMe() {
     if (m_dirty) {
         // Call base class to update perspective
-        Camera::update();
+        Camera::updateMe();
 
         // Now use lookat function to set the view matrix (assume y is up)
         glm::dmat3 R_yaw = glm::mat3_cast(glm::angleAxis(m_yaw, glm::dvec3(0.0, 1.0, 0.0)));

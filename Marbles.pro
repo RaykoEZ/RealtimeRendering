@@ -27,7 +27,8 @@ HEADERS+= $$PWD/include/NGLScene.h \
           $$PWD/include/WindowParams.h \
           $$PWD/include/ScreenQuad.h \
           $$PWD/include/camera.h \
-          $$PWD/include/trackballcamera.h
+          $$PWD/include/trackballcamera.h \
+          $$PWD/include/glinclude.h
 # and add the include dir into the search path for Qt and make
 INCLUDEPATH +=./include
 

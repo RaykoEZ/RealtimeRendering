@@ -1,11 +1,14 @@
 #ifndef NGLSCENE_H_
 #define NGLSCENE_H_
 #include "WindowParams.h"
+// Includes the GL headers in platform independent and order specific way
+//#include "glinclude.h"
 // Includes for GLM
 #include <glm/glm.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <memory>
+#include "trackballcamera.h"
 #include "ScreenQuad.h"
 #include <ngl/Camera.h>
 #include <ngl/Colour.h>
@@ -60,11 +63,12 @@ private:
   GLuint m_envTex, m_glossMapTex;
   std::unique_ptr<ngl::Obj> m_mesh;
   std::string m_objPath = std::string("models/Helix.obj");
-
-
+  /// A user switch to change the way colour is used in the shader and which shapes to draw
+  int m_colourMode, m_shapeType;
+  bool m_isBlending;
   std::chrono::high_resolution_clock::time_point m_startTime;
   std::unique_ptr<ScreenQuad> m_screenQuad;
-  ngl::Vec3 m_eye, m_lookAt;
+  glm::vec3 m_eye, m_lookAt;
   GLint m_width, m_height;
   /// Initialise the entire environment map
   void initEnvironment();
@@ -85,7 +89,7 @@ private:
   //----------------------------------------------------------------------------------------------------------------------
   /// @brief Our Camera
   //----------------------------------------------------------------------------------------------------------------------
-  ngl::Camera m_cam;
+  TrackballCamera m_cam;
   //----------------------------------------------------------------------------------------------------------------------
   /// @brief the model position for mouse movement
   //----------------------------------------------------------------------------------------------------------------------

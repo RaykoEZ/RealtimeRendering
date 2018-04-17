@@ -33,7 +33,7 @@ public:
     virtual void resize(int /*width*/, int /*height*/);
 
     /// Call this before you need to retrieve the matrices from the camera
-    virtual void update() = 0;
+    virtual void updateMe() = 0;
 
     /// Handle keypress / release events
     virtual void handleKey(int /*glfw key*/, bool /*isPress*/) {}
@@ -47,6 +47,7 @@ public:
     /// Functions to retrieve matrices from the camera
     const glm::mat4 &viewMatrix() {return m_V;}
     const glm::mat4 &projMatrix() {return m_P;}
+
 
     /// Set the initial mouse position manually
     virtual void setInitialMousePos(float mouseX, float mouseY) {m_lastX=mouseX; m_lastY=mouseY;}

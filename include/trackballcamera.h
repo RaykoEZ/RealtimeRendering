@@ -19,13 +19,13 @@ public:
     TrackballCamera();
 
     /// Call this before you need to retrieve the matrices from the camera
-    virtual void update();
+    virtual void updateMe();
 
     /// Mouse movement handler to look around
     virtual void handleMouseMove(QMouseEvent *event);
 
     /// Mouse click handler
-    virtual void handleMouseClick(QMouseEvent *event);
+    virtual void handleMouseClick(QMouseEvent *event, int action);
 
     /// Set the direction you're looking
     void setTarget(const double& x, const double& y, const double& z) {m_target = glm::dvec3(x,y,z);}
