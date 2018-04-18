@@ -1,4 +1,6 @@
 
+
+include(common.pri)
 # This specifies the exe name
 TARGET=Marbles
 # where to put the .o files
@@ -16,17 +18,15 @@ MOC_DIR=moc
 # on a mac we don't create a .app bundle file ( for ease of multiplatform use)
 CONFIG-=app_bundle
 # Auto include all .cpp files in the project src directory (can specifiy individually if required)
-SOURCES+= $$PWD/src/NGLScene.cpp    \
-          $$PWD/src/NGLSceneMouseControls.cpp \
-          $$PWD/src/main.cpp \
-          $$PWD/src/ScreenQuad.cpp \
+SOURCES+= $$PWD/src/main.cpp \
+          $$PWD/src/scene.cpp \
+          $$PWD/src/sdfscene.cpp \
           $$PWD/src/camera.cpp \
           $$PWD/src/trackballcamera.cpp
 # same for the .h files
-HEADERS+= $$PWD/include/NGLScene.h \
-          $$PWD/include/WindowParams.h \
-          $$PWD/include/ScreenQuad.h \
-          $$PWD/include/camera.h \
+HEADERS+= $$PWD/include/camera.h \
+          $$PWD/include/scene.h \
+          $$PWD/include/sdfscene.h \
           $$PWD/include/trackballcamera.h \
           $$PWD/include/glinclude.h
 # and add the include dir into the search path for Qt and make
@@ -43,9 +43,9 @@ DESTDIR=./
 # add the glsl shader files
 OTHER_FILES+= shaders/*.glsl \
               README.md \
-              SimpleNGL.py
+DISTFILES += $OTHER_FILES
 # were are going to default to a console app
-CONFIG += console
+
 # note each command you add needs a ; as it will be run as a single line
 # first check if we are shadow building or not easiest way is to check out against current
 !equals(PWD, $${OUT_PWD}){

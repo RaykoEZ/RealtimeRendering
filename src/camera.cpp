@@ -39,7 +39,7 @@ double Camera::elapsedTime() {
  *  You should do something in this function to handle the calculation of the
  *  view and projection matrices V and P respectively
  */
-void Camera::updateMe() {
+void Camera::update() {
     m_V = glm::mat4(1.0f);
     m_P = glm::perspective(m_fovy, m_aspect, m_zNear, m_zFar);
 }

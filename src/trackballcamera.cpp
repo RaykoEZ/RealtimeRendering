@@ -32,26 +32,26 @@ TrackballCamera::TrackballCamera() :
  * This is effectively a state machine which determines what we're currently doing. Changes to the
  * mouse behaviour would need to be done here.
  */
-void TrackballCamera::handleMouseClick(QMouseEvent *event, int action) {
+void TrackballCamera::handleMouseClick(double mouseX, double mouseY, int button, int action, int mods) {
     switch(m_state) {
     case TRACKBALL_PASSIVE:
-        if (action == QEvent::MouseButtonPress) {
-            m_lastX = event->x(); m_lastY = event->y();
-            if (event->button() == Qt::LeftButton) {
+        if (action == GLFW_PRESS) {
+            m_lastX = mouseX; m_lastY = mouseY;
+            if (button == GLFW_MOUSE_BUTTON_LEFT) {
                 m_state = TRACKBALL_ROTATING;
-            } else if (event->button() == Qt::RightButton) {
+            } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
                 m_state = TRACKBALL_ZOOMING;
             }
         }
         break;
     case TRACKBALL_ROTATING:
-        if (action == QEvent::MouseButtonRelease && event->button() == Qt::LeftButton) {
+        if (action == GLFW_RELEASE && button == GLFW_MOUSE_BUTTON_LEFT) {
             m_state = TRACKBALL_PASSIVE;
             m_lastYaw = m_yaw; m_lastPitch = m_pitch;
         }
         break;
     case TRACKBALL_ZOOMING:
-        if (action == QEvent::MouseButtonRelease && event->button() == Qt::RightButton) {
+        if (action == GLFW_RELEASE && button == GLFW_MOUSE_BUTTON_RIGHT) {
             m_state = TRACKBALL_PASSIVE;
         }
         break;
@@ -64,13 +64,13 @@ void TrackballCamera::handleMouseClick(QMouseEvent *event, int action) {
  * @param mouseY
  * Pass the mouse move on to the relevent handler
  */
-void TrackballCamera::handleMouseMove(QMouseEvent *event) {
+void TrackballCamera::handleMouseMove(double mouseX, double mouseY) {
     switch (m_state) {
     case TRACKBALL_ROTATING:
-        mouseRotate(event->x(), event->y());
+        mouseRotate(mouseX, mouseY);
         break;
     case TRACKBALL_ZOOMING:
-        mouseZoom(event->x(), event->y());
+        mouseZoom(mouseX, mouseY);
         break;
     default:
         break;
@@ -115,10 +115,10 @@ void TrackballCamera::mouseZoom(double mouseX, double mouseY) {
  * Note that in glm the matrix is constructed using quaternions - I could leave them in this form for the rotation.
  * In this case, the eye is rotated around the target
  */
-void TrackballCamera::updateMe() {
+void TrackballCamera::update() {
     if (m_dirty) {
         // Call base class to update perspective
-        Camera::updateMe();
+        Camera::update();
 
         // Now use lookat function to set the view matrix (assume y is up)
         glm::dmat3 R_yaw = glm::mat3_cast(glm::angleAxis(m_yaw, glm::dvec3(0.0, 1.0, 0.0)));
