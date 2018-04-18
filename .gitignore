@@ -5,6 +5,7 @@
 # qt files
 *.pro.user*
 .qmake*
+obj/
 moc/
 moc_*
 ui_*
@@ -15,6 +16,10 @@ Makefile
 *.so
 *.dylib
 *.dll
+*.obj
+*.ilk
+*.pdb
+
 
 # Compiled Static libraries
 *.lai
@@ -28,6 +33,7 @@ Makefile
 *.sln
 *.user
 *.filters
+*.vc.*
 
 # Executables
 *.exe
@@ -50,5 +56,6 @@ CMakeCache.txt
 CMakeFiles
 CMakeScripts
 Makefile
+Makefile.*
 cmake_install.cmake
 install_manifest.txt
