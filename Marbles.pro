@@ -31,7 +31,6 @@ HEADERS+= $$PWD/include/camera.h \
           $$PWD/include/glinclude.h
 # and add the include dir into the search path for Qt and make
 INCLUDEPATH +=./include
-
 win32:
 {
     # GLM AT HOME
@@ -62,12 +61,4 @@ DISTFILES += $OTHER_FILES
         # now add it as an extra target
         QMAKE_EXTRA_TARGETS += first copydata
 }
-NGLPATH=$$(NGLDIR)
-isEmpty(NGLPATH){ # note brace must be here
-        message("including $HOME/NGL")
-        include($(HOME)/NGL/UseNGL.pri)
-}
-else{ # note brace must be here
-        message("Using custom NGL location")
-        include($(NGLDIR)/UseNGL.pri)
-}
+
