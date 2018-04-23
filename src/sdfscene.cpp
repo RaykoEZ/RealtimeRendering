@@ -11,8 +11,7 @@ SDFScene::SDFScene() : Scene() {
     // Set the time since we started running the scene
     m_startTime = std::chrono::high_resolution_clock::now();
     m_colourMode = 1;
-    m_shapeType = 0;
-    m_isBlending = true;
+    //m_shapeType = 0;
     m_eye = glm::vec3(0.0, 0.0, 2.0);
     m_target = glm::vec3(0.0, 0.0, 0.0);
 }
@@ -78,10 +77,7 @@ void SDFScene::paintGL() noexcept {
     glUniform1i(glGetUniformLocation(pid, "colourMode"), m_colourMode);
 
     // Set the current shape to render
-    glUniform1i(glGetUniformLocation(pid, "shapeType"), m_shapeType);
-
-    // Set whether blending is used between shapes
-    glUniform1i(glGetUniformLocation(pid, "isBlending"), (m_isBlending)?1:0);    
+    //glUniform1i(glGetUniformLocation(pid, "shapeType"), m_shapeType);
     
     // The default NGL plane isn't screen oriented so we still have to rotate it around the x-axis
     // to align with the screen

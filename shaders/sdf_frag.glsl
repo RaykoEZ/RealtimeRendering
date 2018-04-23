@@ -23,9 +23,9 @@ uniform float aoPower = 16.0;             // The exponent for the ao kernel - a 
 uniform int colourMode = 1;
 
 // Modeling parameters
-uniform int isBlending = 1;
 uniform float blendRadius = 0.5f;        // The radius for the polynomial min blend function - higher means more blend
 const float tau = 6.283185;              // A modeling constant
+
 
 // Structure for holding light parameters
 struct LightInfo {
@@ -37,7 +37,7 @@ struct LightInfo {
 
 // We'll have a single light in the scene with some default values
 uniform LightInfo Light = LightInfo(
-            vec4(0.0, 10.0, 10.0, 1.0),   // position
+            vec4(10.0, 10.0, 10.0, 1.0),   // position
             vec3(0.2, 0.2, 0.2),        // La
             vec3(1.0, 1.0, 1.0),        // Ld
             vec3(1.0, 1.0, 1.0)         // Ls
@@ -55,49 +55,119 @@ vec3 Palette(in float t) {
 }
 
 // This determines and stores the shape positions and directions
-const int shapeCount = 5;                // The number of shapes to use (needs to be const)
+const int shapeCount = 1;                // The number of shapes to use (needs to be const)
 vec3 shapePos[shapeCount];               // Array of shape positions
 mat3 shapeDir[shapeCount];               // Array of shape directions
 
 // Allows the user to set the shape type to be rendered. Currently 6 are supported.
-uniform int shapeType = 0;             
+uniform int maxShapeType = 2;
+uniform int shapeType = 0;
 
-// The following fixed shape parameters are needed as we support lots of shapes. 
+// The following fixed shape parameters are needed as we support lots of shapes.
 // These could be input parameters if needed
-uniform vec3 shape_b = vec3(1.0);         // Box corner
-uniform float shape_r = 0.01;             // Rounded box corner radius
-uniform vec2 shape_t = vec2(1.0, 0.3);    // torus wide and narrow radii respectively
-uniform vec3 shape_c = vec3(1.0);         // cylinder/cone cap radius
-uniform vec2 shape_h = vec2(1.0);         // hexagon/triangular prism radius
+uniform float radius = 1.0;
+uniform vec3 elipsoidRadius = vec3(0.8,0.25,2.0);
+
+//Constant material values in https://www.shadertoy.com/view/4lB3D1
+const float DENSITY_MIN = 0.1;
+const float DENSITY_MAX = 0.1;
+const vec3 MATERIAL_COLOR = vec3(0.5,0.8,1)*0.1;
+const vec3 AIR_COLOR = vec3(0.5,0.8,1)*0.1;
+
+const vec3 SURFACE_COLOR = vec3(0.8,1.,0.9);
+const float ID_SKY = 2.001;
+const float ID_FLOOR = 1.0;
+const float ID_LIGHT = 1.001;
+const float ID_GLASS_WALL = 2.000;
+const float ETA = 0.85;
+//  Data for raymarching and caustics. Sampled from https://www.shadertoy.com/view/4lB3D1
+struct CP {
+    float dist;
+    vec3 normal;
+    float mat;
+    vec3 p;
+};
+
+
+struct Ray {
+    vec3 rd;
+    CP cp;
+    vec3 col;
+    float share;
+    float eta;
+};
+
+float rand(vec2 n) {
+        return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
+}
+
 
 // A basic function to return the signed distance from the ground plane
-float ground(vec3 p) { 
-    return p.y; 
+float ground(vec3 p) {
+    return p.y;
 }
+
+
+// All primitives and operations found here:
+// http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
+
+float sdfSphere(vec3 p)
+{
+    return length(p)-radius;
+}
+
+float sdfElipsoid(vec3 p)
+{
+    return (length( p/elipsoidRadius ) - radius) * min(min(elipsoidRadius.x,elipsoidRadius.y),elipsoidRadius.z);
+}
+
+
+vec3 opTwist( vec3 p )
+{
+    float c = cos(0.5*p.y);
+    float s = sin(0.5*p.y);
+    mat2  m = mat2(c,-s,s,c);
+    vec3  q = vec3(m*p.xz,p.y);
+    return q;
+}
+
+
+vec3 opUnion( vec3 d1, vec3 d2 )
+{
+
+        return (d1.x<d2.x) ? d1 : d2;
+}
+
+vec3 opSubtract(  vec3 d1, vec3 d2 )
+{
+    return -d1.x>d2.x ? d2: d1;
+}
+
+/** An approximation of a local surface normal at point p based on finite differences. Pretty generic, but this
+  * version taken from here https://www.shadertoy.com/view/XlXyD4 .
+  * Note this works anywhere in space, not just on the surface.
+  */
 
 /** A function to return a shape to render in the scene at point p.
   */
-float shape(vec3 p) {
-    vec2 q;
-    vec3 d;
-    switch(shapeType) {
-        case 1: // signed exact box
-            d = abs(p) - shape_b;
-            return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,0.0));
-        case 2: // hexagon
-            d = abs(p);
-            return max(d.z-shape_h.y,max((d.x*0.866025+d.y*0.5),d.y)-shape_h.x);
-        case 3: // torus
-            q = vec2(length(p.xz)-shape_t.x,p.y);
-            return length(q)-shape_t.y; 
-        case 4: // cylinder
-            q = abs(vec2(length(p.xz),p.y)) - shape_h;
-            return min(max(q.x,q.y),0.0) + length(max(q,0.0));
-        case 5: // A fancy trimmed cube (shading artefacts here!)
-            return max(length(max(abs(p) - vec3(1.0), 0.0)), length(p) - 1.35);
-        default: // A sphere
-            return length(p)-1.0;        
+float shape(vec3 p, int type) {
+    vec3 q;
+    // type of shape to construct
+    switch(type)
+    {
+        case 0:
+            return sdfSphere(p);
+
+        case 1:
+            q = opTwist(p);
+            //twist elipsoid, scaled with
+            float scale = 0.8;
+            return scale*sdfElipsoid(q/scale);
     }
+    // A sphere
+
+
+
 }
 
 // polynomial smooth min (k = 0.1) from http://iquilezles.org/www/articles/smin/smin.htm
@@ -112,7 +182,7 @@ float smin( float a, float b, float k ) {
   */
 void setShape(float index, out vec3 shapePos, out mat3 shapeDir) {
     float t = tau * mod(index * 0.2 + 0.02 * iTime + 0.12, 1.0);
-    float a = 2.0 * t;
+    float a = 2.0;
     float b = 3.0 * t;
     float c = 7.0 * t;
     shapePos = vec3(1.8 * cos(b),  1.0 + sin(a), 1.8 * cos(c));
@@ -121,12 +191,13 @@ void setShape(float index, out vec3 shapePos, out mat3 shapeDir) {
     shapeDir *= mat3(cos(c), -sin(c), 0.0, sin(c), cos(c), 0.0, 0.0, 0.0, 1.0);
 }
 
-/** This function initialises each shape in the scene. It is modified from https://www.shadertoy.com/view/XlXyD4 
+/** This function initialises each shape in the scene. It is modified from https://www.shadertoy.com/view/XlXyD4
   * to support an arbitrary number of shapes
   */
 void setScene() {
     float shapeRatio = 5.0 / float(shapeCount);
     for (int i = 0; i < shapeCount; ++i) {
+
         setShape(float(i) * shapeRatio, shapePos[i], shapeDir[i]);
     }
 }
@@ -134,33 +205,43 @@ void setScene() {
 /** This function returns the distance from a 3D point p to the surface. It is used a lot in
   * the ray marching algorithm, and needs to be as fast as humanly possible.
   */
+
+//map >> map1
 float scene(vec3 p) {
     float s = ground(p);
-    for (int i = 0; i < shapeCount; ++i) {
-        if (isBlending == 1) {
-            s = smin(s, shape(shapeDir[i] * (p - shapePos[i])), blendRadius);
-        } else {
-            s = min(s, shape(shapeDir[i] * (p - shapePos[i])));
+    for (int i = 0; i < shapeCount; ++i)
+    {
+        for (int j =0; j< maxShapeType; ++j)
+        {
+            s = min(s, shape(shapeDir[i] * (p - shapePos[i]),j));
+
         }
-    }    
+
+    }
     return s;
 }
 
+vec3 normal(vec3 p) {
+    return normalize(vec3(
+        scene(vec3(p.x + epsilon, p.y, p.z)) - scene(vec3(p.x - epsilon, p.y, p.z)),
+        scene(vec3(p.x, p.y + epsilon, p.z)) - scene(vec3(p.x, p.y - epsilon, p.z)),
+        scene(vec3(p.x, p.y, p.z + epsilon)) - scene(vec3(p.x, p.y, p.z - epsilon))
+    ));
+}
 /** I need another version of ths scene function to visualise the distance field on the ground plane.
   */
+/*
 float sceneWithoutGround(vec3 p) {
     float s = marchDist; // this needs to be bigger than the predicted distance to the scene
-    for (int i = 0; i < shapeCount; ++i) {
-        if (isBlending == 1) {
-            s = smin(s, shape(shapeDir[i] * (p - shapePos[i])), blendRadius);
-        } else {
-            s = min(s, shape(shapeDir[i] * (p - shapePos[i])));
-        }
-    }    
+    for (int i = 0; i < shapeCount; ++i)
+    {
+
+        s = min(s, shape(shapeDir[i] * (p - shapePos[i])));
+    }
     return s;
 }
-
-/** This is where the magic happens. The algorithm was taken from https://www.shadertoy.com/view/XlXyD4  but it is 
+*/
+/** This is where the magic happens. The algorithm was taken from https://www.shadertoy.com/view/XlXyD4  but it is
   * quite generic and was originally taken from (and explained rather well) here:
   * http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
   */
@@ -170,10 +251,175 @@ float march(vec3 eye, vec3 dir) {
         float dist = scene(eye + depth * dir);
         depth += dist;
         if (dist < epsilon || depth >= marchDist)
-			break;
+                        break;
     }
     return depth;
 }
+
+
+CP findIntersection(vec3 p, vec3 rd) {
+
+    float depth = 0.0;
+
+    float dist;
+    for (int i = 0; i < marchIter; ++i)
+    {
+        dist = scene(p + depth * rd);
+        depth += dist;
+
+        if (dist < epsilon || depth >= marchDist) break;
+    }
+
+    p += rd * depth;
+    // calculate normal in the father point to avoid artifacts
+    vec3 n = normal(p-rd*(epsilon-dist));
+    CP cp;
+    cp = CP(depth, n, dist, p);
+
+    return cp;
+}
+
+//-------------------------------------------------------------------------------
+
+
+vec3 refractCaustic(vec3 p, vec3 rd, vec3 ld, float eta) {
+     vec3 cl = vec3(1);
+    for(int j = 0; j < 2; ++j) {
+
+        CP cp = findIntersection(p, rd);
+        if (length(cp.p) > 2.) {
+            break;
+        }
+        cl *= SURFACE_COLOR;//*(abs(dot(rd, cp.normal)));
+        vec3 normal = sign(dot(rd, cp.normal))*cp.normal;
+        rd = refract(rd, -normal, eta);
+
+        p = cp.p;
+        eta = 1./eta;
+        p += normal*epsilon*2.;
+
+    }
+     float d = clamp( dot( rd, ld ), 0.0, 1.0 );
+     return smoothstep(0.99, 1., d)*cl;
+}
+
+vec3 caustic(vec3 p,vec3 ld, Ray ray) {
+    vec3 VX = normalize(cross(ld, vec3(0,1,0)));
+        vec3 VY = normalize(cross(ld, VX));
+    vec3 c = vec3(0);
+
+    const int N =3;
+    p += ray.cp.normal*epsilon;
+
+    for(int i = 0; i < N;++i) {
+
+        float n1 = rand(p.xz*10. + vec2(iTime*2. +float(i)*123.));
+        float n2 = rand(p.xz*15. +vec2(iTime*3. +float(i)*111.));
+
+        vec3 rd = ld+(VX*(n1-0.5)+VY*(n2-0.5))*0.1;
+       // rd = ld;
+        rd = normalize(rd);
+
+                vec3 cl = refractCaustic(p, rd, ld, ray.eta);
+
+        c += cl* dot(rd,ray.cp.normal);
+    }
+    return c*3./float(N);
+}
+
+// lightning is based on https://www.shadertoy.com/view/Xds3zN
+vec3 getFloorColor(in Ray ray) {
+
+    vec3 col = vec3(0);
+    vec3 pos = ray.cp.p;
+    vec3 ref = reflect( ray.rd, ray.cp.normal );
+
+    float f = mod( floor(5.0*pos.z) + floor(5.0*pos.x), 2.0);
+    col = 0.4 + 0.1*f*vec3(1.0);
+    //let direction of light be normal of surface point
+    vec3 LIGHT_DIR = vec3(normal(ray.cp.p));
+    float dif = clamp( dot( ray.cp.normal, LIGHT_DIR ), 0.0, 1.0 );
+    vec3 brdf = vec3(0.0);
+    brdf += caustic(pos, LIGHT_DIR, ray);
+    brdf += 1.20*dif*vec3(1.00,0.90,0.60);
+    col = col*brdf;
+    // exclude branching
+    col *= (ID_GLASS_WALL-ray.cp.mat);
+
+    return col;
+}
+
+
+vec3 getColor(in Ray ray) {
+
+    vec3 p = ray.cp.p ;// can be used by SURFACE_COLOR define
+    vec3 c1 = ray.col * SURFACE_COLOR;
+    vec3 c2 = getFloorColor(ray);
+    // exclude branching
+    return mix(c2, c1, ray.cp.mat - ID_FLOOR);
+
+}
+
+vec3 getRayColor(Ray ray) {
+
+
+    float d = mix(DENSITY_MIN, DENSITY_MAX, (ray.eta - ETA)/(1./ETA-ETA));
+    vec3 matColor = mix(AIR_COLOR, MATERIAL_COLOR, (ray.eta - ETA)/(1./ETA-ETA));
+    vec3 col = getColor(ray);
+
+    float q = exp(-d*ray.cp.dist);
+    col = col*q+matColor*(1.-q);
+    return col*ray.share;
+}
+
+void getRays(inout Ray ray, out Ray r1, out Ray r2) {
+     vec3 p = ray.cp.p;
+    float cs = dot(ray.cp.normal, ray.rd);
+    // simple approximation
+    float fresnel = 1.0-abs(cs);
+//	fresnel = mix(0.1, 1., 1.0-abs(cs));
+    float r = ray.cp.mat - ID_FLOOR;
+     vec3 normal = sign(cs)*ray.cp.normal;
+    vec3 refr = refract(ray.rd, -normal, ray.eta);
+    vec3 refl = reflect(ray.rd, ray.cp.normal);
+    vec3 z = normal*epsilon*2.;
+    p += z;
+    r1 = Ray(refr, findIntersection(p, refr),  vec3(0),(1.-fresnel)*r, 1./ray.eta);
+    p -= 2.*z;
+    r2 = Ray( refl, findIntersection(p, refl), vec3(0),r*fresnel, ray.eta);
+}
+
+// set of "recursion" functions
+
+void rec1(inout Ray ray) {
+    ray.col += getRayColor(ray);
+}
+
+
+void rec2(inout Ray ray) {
+
+    Ray r1,r2;
+    getRays(ray, r1, r2);
+
+    ray.col += getRayColor(r1);
+    ray.col += getRayColor(r2);
+}
+
+void rec3(inout Ray ray) {
+
+    Ray r1,r2;
+    getRays(ray, r1, r2);
+
+    rec2(r1);
+    ray.col += getRayColor(r1);
+    // use first level of relfection rays only to improve performance
+    rec1(r2);
+    ray.col += getRayColor(r2);
+}
+
+
+
+
 
 /** This is an implementation of ambient occlusion method for SDF scenes, 
   * described here: http://iquilezles.org/www/material/nvscene2008/rwwtt.pdf .
@@ -195,17 +441,7 @@ float ao(vec3 p, vec3 n) {
     return 1.0 -  constK * max(sum, 0.0);
 }
 
-/** An approximation of a local surface normal at point p based on finite differences. Pretty generic, but this
-  * version taken from here https://www.shadertoy.com/view/XlXyD4 .
-  * Note this works anywhere in space, not just on the surface.
-  */
-vec3 normal(vec3 p) {
-    return normalize(vec3(
-        scene(vec3(p.x + epsilon, p.y, p.z)) - scene(vec3(p.x - epsilon, p.y, p.z)),
-        scene(vec3(p.x, p.y + epsilon, p.z)) - scene(vec3(p.x, p.y - epsilon, p.z)),
-        scene(vec3(p.x, p.y, p.z + epsilon)) - scene(vec3(p.x, p.y, p.z - epsilon))
-    ));
-}
+
 
 /** A generic function to determine the ray to march into the scene based on the fragment coordinates. 
   * Taken from https://www.shadertoy.com/view/XlXyD4 
@@ -342,7 +578,7 @@ void main() {
         fragColor = vec4(Palette(aoFactor), 1.0);
         break;
     case 3:
-        fragColor = vec4(Palette(sceneWithoutGround(p)),1.0);
+        //fragColor = vec4(Palette(sceneWithoutGround(p)),1.0);
         break;
     case 4:
         fragColor = vec4(Palette(NdotL), 1.0);
