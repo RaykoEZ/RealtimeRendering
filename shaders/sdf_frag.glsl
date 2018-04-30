@@ -2,10 +2,9 @@
 
 uniform vec3      iResolution;           // viewport resolution (in pixels)
 uniform float     iTime;                 // shader playback time (in seconds)
-
+//uniform vec3      iMouse;
 uniform vec3 eyepos = vec3(0.0, 0.0, 1.0);  // Eye position
 uniform vec3 target = vec3(0.0, 0.0, 0.0);// Target
-
 out vec4 fragColor;                      // Output colour value from this shader
 
 // Ray marching parameters
@@ -66,7 +65,7 @@ uniform int shapeType = 0;
 // The following fixed shape parameters are needed as we support lots of shapes.
 // These could be input parameters if needed
 uniform float radius = 1.0;
-uniform vec3 elipsoidRadius = vec3(0.8,0.25,2.0);
+uniform vec3 elipsoidRadius = vec3(0.4,0.25,0.6);
 
 //Constant material values in https://www.shadertoy.com/view/4lB3D1
 const float DENSITY_MIN = 0.1;
@@ -75,11 +74,10 @@ const vec3 MATERIAL_COLOR = vec3(0.5,0.8,1)*0.1;
 const vec3 AIR_COLOR = vec3(0.5,0.8,1)*0.1;
 
 const vec3 SURFACE_COLOR = vec3(0.8,1.,0.9);
-const float ID_SKY = 2.001;
 const float ID_FLOOR = 1.0;
-const float ID_LIGHT = 1.001;
 const float ID_GLASS_WALL = 2.000;
-const float ETA = 0.85;
+const float ID_INSIDE = 3.000;
+const float ETA = 1.0;
 //  Data for raymarching and caustics. Sampled from https://www.shadertoy.com/view/4lB3D1
 struct CP {
     float dist;
@@ -135,7 +133,7 @@ vec3 opTwist( vec3 p )
 vec3 opUnion( vec3 d1, vec3 d2 )
 {
 
-        return (d1.x<d2.x) ? d1 : d2;
+    return (d1.x<d2.x) ? d1 : d2;
 }
 
 vec3 opSubtract(  vec3 d1, vec3 d2 )
@@ -164,12 +162,22 @@ float shape(vec3 p, int type) {
             float scale = 0.8;
             return scale*sdfElipsoid(q/scale);
     }
-    // A sphere
-
-
-
 }
+vec3 shapeV(vec3 p, int type) {
+    vec3 q;
+    // type of shape to construct
+    switch(type)
+    {
+        case 0:
+            return vec3(sdfSphere(p),ID_GLASS_WALL,ETA);
 
+        case 1:
+            q = opTwist(p);
+            //twist elipsoid, scaled with
+            float scale = 0.3;
+            return vec3(scale*sdfElipsoid(q/scale),ID_INSIDE,ETA);
+    }
+}
 // polynomial smooth min (k = 0.1) from http://iquilezles.org/www/articles/smin/smin.htm
 // the bigger the k, the bigger the region of smoothing
 float smin( float a, float b, float k ) {
@@ -182,9 +190,9 @@ float smin( float a, float b, float k ) {
   */
 void setShape(float index, out vec3 shapePos, out mat3 shapeDir) {
     float t = tau * mod(index * 0.2 + 0.02 * iTime + 0.12, 1.0);
-    float a = 2.0;
-    float b = 3.0 * t;
-    float c = 7.0 * t;
+    float a = 0.0;
+    float b = 3.0 ;
+    float c = 7.0*t ;
     shapePos = vec3(1.8 * cos(b),  1.0 + sin(a), 1.8 * cos(c));
     shapeDir = mat3(cos(a), -sin(a), 0.0, sin(a), cos(a), 0.0, 0.0, 0.0, 1.0);
     shapeDir *= mat3(cos(b), 0.0, -sin(b), 0.0, 1.0, 0.0, sin(b), 0.0, cos(b));
@@ -207,7 +215,7 @@ void setScene() {
   */
 
 //map >> map1
-float scene(vec3 p) {
+float scene(in vec3 p) {
     float s = ground(p);
     for (int i = 0; i < shapeCount; ++i)
     {
@@ -220,14 +228,28 @@ float scene(vec3 p) {
     }
     return s;
 }
+vec3 sceneV(in vec3 p) {
+    vec3 s = vec3(ground(p), ID_FLOOR,-1.0);
+    for (int i = 0; i < shapeCount; ++i)
+    {
+        for (int j =0; j< maxShapeType; ++j)
+        {
+            s = opUnion(s, shapeV(shapeDir[i] * (p - shapePos[i]),j));
 
+        }
+
+    }
+    s.x = abs(s.x);
+    return s;
+}
 vec3 normal(vec3 p) {
     return normalize(vec3(
-        scene(vec3(p.x + epsilon, p.y, p.z)) - scene(vec3(p.x - epsilon, p.y, p.z)),
-        scene(vec3(p.x, p.y + epsilon, p.z)) - scene(vec3(p.x, p.y - epsilon, p.z)),
-        scene(vec3(p.x, p.y, p.z + epsilon)) - scene(vec3(p.x, p.y, p.z - epsilon))
+        sceneV(vec3(p.x + epsilon, p.y, p.z)).x - sceneV(vec3(p.x - epsilon, p.y, p.z)).x,
+        sceneV(vec3(p.x, p.y + epsilon, p.z)).x - sceneV(vec3(p.x, p.y - epsilon, p.z)).x,
+        sceneV(vec3(p.x, p.y, p.z + epsilon)).x - sceneV(vec3(p.x, p.y, p.z - epsilon)).x
     ));
 }
+
 /** I need another version of ths scene function to visualise the distance field on the ground plane.
   */
 /*
@@ -260,21 +282,21 @@ float march(vec3 eye, vec3 dir) {
 CP findIntersection(vec3 p, vec3 rd) {
 
     float depth = 0.0;
-
-    float dist;
+    float eta = -1.;
+    vec3 dist;
     for (int i = 0; i < marchIter; ++i)
     {
-        dist = scene(p + depth * rd);
-        depth += dist;
-
-        if (dist < epsilon || depth >= marchDist) break;
+        dist = sceneV(p + depth * rd);
+        depth += dist.x;
+        eta = dist.z;
+        if (dist.x < epsilon || depth >= marchDist) break;
     }
 
     p += rd * depth;
     // calculate normal in the father point to avoid artifacts
-    vec3 n = normal(p-rd*(epsilon-dist));
+    vec3 n = normal(p-rd*(epsilon-dist.x));
     CP cp;
-    cp = CP(depth, n, dist, p);
+    cp = CP(depth, n, dist.y, p);
 
     return cp;
 }
@@ -305,7 +327,7 @@ vec3 refractCaustic(vec3 p, vec3 rd, vec3 ld, float eta) {
 
 vec3 caustic(vec3 p,vec3 ld, Ray ray) {
     vec3 VX = normalize(cross(ld, vec3(0,1,0)));
-        vec3 VY = normalize(cross(ld, VX));
+    vec3 VY = normalize(cross(ld, VX));
     vec3 c = vec3(0);
 
     const int N =3;
@@ -317,10 +339,10 @@ vec3 caustic(vec3 p,vec3 ld, Ray ray) {
         float n2 = rand(p.xz*15. +vec2(iTime*3. +float(i)*111.));
 
         vec3 rd = ld+(VX*(n1-0.5)+VY*(n2-0.5))*0.1;
-       // rd = ld;
+        //rd = ld;
         rd = normalize(rd);
 
-                vec3 cl = refractCaustic(p, rd, ld, ray.eta);
+        vec3 cl = refractCaustic(p, rd, ld, ray.eta);
 
         c += cl* dot(rd,ray.cp.normal);
     }
@@ -337,7 +359,8 @@ vec3 getFloorColor(in Ray ray) {
     float f = mod( floor(5.0*pos.z) + floor(5.0*pos.x), 2.0);
     col = 0.4 + 0.1*f*vec3(1.0);
     //let direction of light be normal of surface point
-    vec3 LIGHT_DIR = vec3(normal(ray.cp.p));
+    //vec3 LIGHT_DIR = normalize(vec3(pos-Light.Position.xyz));
+    vec3 LIGHT_DIR = normalize(vec3(-0.6,0.7,-0.3));
     float dif = clamp( dot( ray.cp.normal, LIGHT_DIR ), 0.0, 1.0 );
     vec3 brdf = vec3(0.0);
     brdf += caustic(pos, LIGHT_DIR, ray);
@@ -356,7 +379,7 @@ vec3 getColor(in Ray ray) {
     vec3 c1 = ray.col * SURFACE_COLOR;
     vec3 c2 = getFloorColor(ray);
     // exclude branching
-    return mix(c2, c1, ray.cp.mat - ID_FLOOR);
+    return mix(c2, c1, ray.cp.mat-ID_FLOOR);
 
 }
 
@@ -379,7 +402,7 @@ void getRays(inout Ray ray, out Ray r1, out Ray r2) {
     float fresnel = 1.0-abs(cs);
 //	fresnel = mix(0.1, 1., 1.0-abs(cs));
     float r = ray.cp.mat - ID_FLOOR;
-     vec3 normal = sign(cs)*ray.cp.normal;
+    vec3 normal = sign(cs)*ray.cp.normal;
     vec3 refr = refract(ray.rd, -normal, ray.eta);
     vec3 refl = reflect(ray.rd, ray.cp.normal);
     vec3 z = normal*epsilon*2.;
@@ -418,9 +441,20 @@ void rec3(inout Ray ray) {
 }
 
 
+vec3 castRay(vec3 p, vec3 rd) {
+    CP cp = findIntersection(p, rd);
 
+    Ray ray = Ray( rd, cp, vec3(0), 1.0, ETA);
+    rec3(ray);
+    ray.col = getRayColor(ray);
+        return ray.col;
 
+}
 
+vec3 render(vec3 p, vec3 rd) {
+    vec3 col= castRay(p, rd);
+    return col;
+}
 /** This is an implementation of ambient occlusion method for SDF scenes, 
   * described here: http://iquilezles.org/www/material/nvscene2008/rwwtt.pdf .
   * Note this is considerably faster than the method implemented here: https://www.shadertoy.com/view/XlXyD4
@@ -502,12 +536,20 @@ float softShadow( in vec3 p, in vec3 dir, float maxt) {
 }
 
 void main() {
+
     // Determine where the viewer is looking based on the provided eye position and scene target
     vec3 dir = ray(2.5, iResolution.xy, gl_FragCoord.xy);
+    vec2 uv = gl_FragCoord.xy / iResolution.xy-0.5;
+    uv.x*=iResolution.x/iResolution.y;
     mat3 mat = viewMatrix(target - eyepos, vec3(0.0, 1.0, 0.0));
     vec3 eye = eyepos;
     dir = mat * dir;
+    setScene();
+    vec3 c = render(eye,dir);
 
+    fragColor = vec4(c,1.0);
+
+    /*
     // Initialise the scene based on the current elapsed time
     setScene();
     
@@ -590,4 +632,5 @@ void main() {
         fragColor = vec4(aoFactor * shadowFactor * (Light.Ld * NdotL + Light.Ls * specular), 1.0);
         break;
     }
+    */
 }

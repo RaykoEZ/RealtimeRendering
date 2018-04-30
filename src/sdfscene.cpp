@@ -75,7 +75,7 @@ void SDFScene::paintGL() noexcept {
 
     // Set the current colour mode (0,1 or 2)
     glUniform1i(glGetUniformLocation(pid, "colourMode"), m_colourMode);
-
+    //glUniform3fv(glGetUniformLocation(pid, "iMouse"), 1, glm::value_ptr(glm::vec3(float(m_mouseX),float(m_mouseY),0.0f)));
     // Set the current shape to render
     //glUniform1i(glGetUniformLocation(pid, "shapeType"), m_shapeType);
     

@@ -30,7 +30,8 @@ public:
     /// Set the target and eye position
     void setEye(const glm::vec3& eye) {m_eye = eye;}
     void setTarget(const glm::vec3& target) {m_target = target;}
-
+    void setMouseX(const double &_x){ m_mouseX = _x;}
+    void setMouseY(const double &_y){ m_mouseY = _y;}
 private:
     /// Keep track of the last time
     std::chrono::high_resolution_clock::time_point m_startTime;
@@ -40,7 +41,7 @@ private:
 
     /// Determine whether blending is used in the shader
     bool m_isBlending;
-
+    double m_mouseX = 0.0, m_mouseY = 0.0;
     /// Sets the target and eye position on the shader
     glm::vec3 m_eye, m_target;
 };

@@ -188,7 +188,10 @@ int main() {
         // Set the eye position and camera target for the render
         g_scene.setEye(g_camera.getTransformedEye());
         g_scene.setTarget(g_camera.getTarget());
-
+        double mouseX, mouseY;
+        glfwGetCursorPos(window, &mouseX, &mouseY);
+        g_scene.setMouseX(mouseX);
+        g_scene.setMouseY(mouseY);
         // Draw our GL stuff
         g_scene.paintGL();
 
