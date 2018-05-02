@@ -65,7 +65,7 @@ uniform int shapeType = 0;
 // The following fixed shape parameters are needed as we support lots of shapes.
 // These could be input parameters if needed
 uniform float radius = 1.0;
-uniform vec3 elipsoidRadius = vec3(0.4,0.25,0.6);
+uniform vec3 elipsoidRadius = vec3(0.1,0.8,2.5);
 
 //Constant material values in https://www.shadertoy.com/view/4lB3D1
 const float DENSITY_MIN = 0.1;
@@ -77,7 +77,7 @@ const vec3 SURFACE_COLOR = vec3(0.8,1.,0.9);
 const float ID_FLOOR = 1.0;
 const float ID_GLASS_WALL = 2.000;
 const float ID_INSIDE = 3.000;
-const float ETA = 1.0;
+const float ETA = 0.85;
 //  Data for raymarching and caustics. Sampled from https://www.shadertoy.com/view/4lB3D1
 struct CP {
     float dist;
@@ -148,24 +148,10 @@ vec3 opSubtract(  vec3 d1, vec3 d2 )
 
 /** A function to return a shape to render in the scene at point p.
   */
-float shape(vec3 p, int type) {
-    vec3 q;
-    // type of shape to construct
-    switch(type)
-    {
-        case 0:
-            return sdfSphere(p);
 
-        case 1:
-            q = opTwist(p);
-            //twist elipsoid, scaled with
-            float scale = 0.8;
-            return scale*sdfElipsoid(q/scale);
-    }
-}
-vec3 shapeV(vec3 p, int type) {
+vec3 shape(vec3 p, int type) {
     vec3 q;
-    // type of shape to construct
+    // type of shape to construct, 0 for outside, 1 inside
     switch(type)
     {
         case 0:
@@ -215,40 +201,59 @@ void setScene() {
   */
 
 //map >> map1
-float scene(in vec3 p) {
-    float s = ground(p);
-    for (int i = 0; i < shapeCount; ++i)
-    {
-        for (int j =0; j< maxShapeType; ++j)
-        {
-            s = min(s, shape(shapeDir[i] * (p - shapePos[i]),j));
 
-        }
-
-    }
-    return s;
-}
-vec3 sceneV(in vec3 p) {
+vec3 sceneOut(in vec3 p) {
     vec3 s = vec3(ground(p), ID_FLOOR,-1.0);
+    /*
     for (int i = 0; i < shapeCount; ++i)
     {
         for (int j =0; j< maxShapeType; ++j)
         {
-            s = opUnion(s, shapeV(shapeDir[i] * (p - shapePos[i]),j));
+            s = opUnion(s, shape(shapeDir[i] * (p - shapePos[i]),j));
 
         }
 
-    }
-    s.x = abs(s.x);
+    }*/
+    s = opUnion(s, shape(shapeDir[0] * (p - shapePos[0]),0));
+
+    //s.x = abs(s.x);
     return s;
 }
-vec3 normal(vec3 p) {
+
+
+vec3 sceneIn(in vec3 p) {
+    vec3 s = vec3(ground(p), ID_FLOOR,-1.0);
+    /*
+    for (int i = 0; i < shapeCount; ++i)
+    {
+        for (int j =0; j< maxShapeType; ++j)
+        {
+            s = opUnion(s, shape(shapeDir[i] * (p - shapePos[i]),j));
+
+        }
+
+    }*/
+    s = opUnion(s, shape(shapeDir[0] * (p - shapePos[0]),1));
+    //s.x = abs(s.x);
+    return s;
+}
+
+
+vec3 normalOut(vec3 p) {
     return normalize(vec3(
-        sceneV(vec3(p.x + epsilon, p.y, p.z)).x - sceneV(vec3(p.x - epsilon, p.y, p.z)).x,
-        sceneV(vec3(p.x, p.y + epsilon, p.z)).x - sceneV(vec3(p.x, p.y - epsilon, p.z)).x,
-        sceneV(vec3(p.x, p.y, p.z + epsilon)).x - sceneV(vec3(p.x, p.y, p.z - epsilon)).x
+        sceneOut(vec3(p.x + epsilon, p.y, p.z)).x - sceneOut(vec3(p.x - epsilon, p.y, p.z)).x,
+        sceneOut(vec3(p.x, p.y + epsilon, p.z)).x - sceneOut(vec3(p.x, p.y - epsilon, p.z)).x,
+        sceneOut(vec3(p.x, p.y, p.z + epsilon)).x - sceneOut(vec3(p.x, p.y, p.z - epsilon)).x
     ));
 }
+vec3 normalIn(vec3 p) {
+    return normalize(vec3(
+        sceneIn(vec3(p.x + epsilon, p.y, p.z)).x - sceneIn(vec3(p.x - epsilon, p.y, p.z)).x,
+        sceneIn(vec3(p.x, p.y + epsilon, p.z)).x - sceneIn(vec3(p.x, p.y - epsilon, p.z)).x,
+        sceneIn(vec3(p.x, p.y, p.z + epsilon)).x - sceneIn(vec3(p.x, p.y, p.z - epsilon)).x
+    ));
+}
+
 
 /** I need another version of ths scene function to visualise the distance field on the ground plane.
   */
@@ -270,7 +275,7 @@ float sceneWithoutGround(vec3 p) {
 float march(vec3 eye, vec3 dir) {
     float depth = 0.0;
     for (int i = 0; i < marchIter; ++i) {
-        float dist = scene(eye + depth * dir);
+        float dist = sceneOut(eye + depth * dir).x;
         depth += dist;
         if (dist < epsilon || depth >= marchDist)
                         break;
@@ -279,45 +284,66 @@ float march(vec3 eye, vec3 dir) {
 }
 
 
-CP findIntersection(vec3 p, vec3 rd) {
+
+CP findIntersection(inout vec3 p, inout vec3 rd) {
 
     float depth = 0.0;
-    float eta = -1.;
+
     vec3 dist;
     for (int i = 0; i < marchIter; ++i)
     {
-        dist = sceneV(p + depth * rd);
+        dist = sceneOut(p + depth * rd);
         depth += dist.x;
-        eta = dist.z;
         if (dist.x < epsilon || depth >= marchDist) break;
     }
 
+
     p += rd * depth;
     // calculate normal in the father point to avoid artifacts
-    vec3 n = normal(p-rd*(epsilon-dist.x));
+    vec3 n = normalOut(p-rd*(epsilon-dist.x));
     CP cp;
     cp = CP(depth, n, dist.y, p);
 
     return cp;
 }
+CP findIntersectionIn(inout vec3 p, inout vec3 rd) {
 
+    float depth = 0.0;
+
+    vec3 dist;
+    for (int i = 0; i < marchIter; ++i)
+    {
+        dist = sceneIn(p + depth * rd);
+        depth += dist.x;
+        if (dist.x < epsilon || depth >= marchDist) break;
+    }
+
+
+    p += rd * depth;
+    // calculate normal in the father point to avoid artifacts
+    vec3 n = normalOut(p-rd*(epsilon-dist.x));
+    CP cp;
+    cp = CP(depth, n, dist.y, p);
+
+    return cp;
+}
 //-------------------------------------------------------------------------------
 
 
-vec3 refractCaustic(vec3 p, vec3 rd, vec3 ld, float eta) {
-     vec3 cl = vec3(1);
+vec3 refractCaustic(vec3 p, vec3 rd, vec3 ld, inout float eta) {
+
+    vec3 cl = vec3(1);
     for(int j = 0; j < 2; ++j) {
 
         CP cp = findIntersection(p, rd);
         if (length(cp.p) > 2.) {
             break;
         }
-        cl *= SURFACE_COLOR;//*(abs(dot(rd, cp.normal)));
+        cl *= SURFACE_COLOR*(abs(dot(rd, cp.normal)));
         vec3 normal = sign(dot(rd, cp.normal))*cp.normal;
         rd = refract(rd, -normal, eta);
-
-        p = cp.p;
         eta = 1./eta;
+        p = cp.p;
         p += normal*epsilon*2.;
 
     }
@@ -346,7 +372,7 @@ vec3 caustic(vec3 p,vec3 ld, Ray ray) {
 
         c += cl* dot(rd,ray.cp.normal);
     }
-    return c*3./float(N);
+    return c*5./float(N);
 }
 
 // lightning is based on https://www.shadertoy.com/view/Xds3zN
@@ -407,7 +433,7 @@ void getRays(inout Ray ray, out Ray r1, out Ray r2) {
     vec3 refl = reflect(ray.rd, ray.cp.normal);
     vec3 z = normal*epsilon*2.;
     p += z;
-    r1 = Ray(refr, findIntersection(p, refr),  vec3(0),(1.-fresnel)*r, 1./ray.eta);
+    r1 = Ray(refr, findIntersectionIn(p, refr),  vec3(0),(1.-fresnel)*r, 1./ray.eta);
     p -= 2.*z;
     r2 = Ray( refl, findIntersection(p, refl), vec3(0),r*fresnel, ray.eta);
 }
@@ -443,18 +469,22 @@ void rec3(inout Ray ray) {
 
 vec3 castRay(vec3 p, vec3 rd) {
     CP cp = findIntersection(p, rd);
-
     Ray ray = Ray( rd, cp, vec3(0), 1.0, ETA);
     rec3(ray);
     ray.col = getRayColor(ray);
+
         return ray.col;
 
 }
 
+
+
 vec3 render(vec3 p, vec3 rd) {
     vec3 col= castRay(p, rd);
+
     return col;
 }
+
 /** This is an implementation of ambient occlusion method for SDF scenes, 
   * described here: http://iquilezles.org/www/material/nvscene2008/rwwtt.pdf .
   * Note this is considerably faster than the method implemented here: https://www.shadertoy.com/view/XlXyD4
@@ -468,7 +498,7 @@ float ao(vec3 p, vec3 n) {
     float constK = 0.5; // Not sure what this needs to be, but 0.5 seems to work
 
     for (int i = 0; i < aoIter; ++i) {
-        sum += factor * (depth - scene(p+n*depth)) / depth;
+        sum += factor * (depth - sceneOut(p+n*depth)) / depth;
         factor *= 0.5;
         depth += depthInc;
     }
@@ -511,7 +541,7 @@ float hardShadow( in vec3 p, in vec3 dir, in float maxt) {
     int iter = 0;
     float t=epsilon;
     for(; (t < maxt) && (iter < shadowIter); ++iter) {
-        float dist = scene(p + dir*t);
+        float dist = sceneOut(p + dir*t).x;
         if( dist < epsilon )
             return 0.0;
         t += dist;
@@ -525,7 +555,7 @@ float softShadow( in vec3 p, in vec3 dir, float maxt) {
     int iter = 0;
     for( ; (t < maxt) && (iter < shadowIter); ++iter )
     {
-        float h = scene(p + dir*t);
+        float h = sceneOut(p + dir*t).x;
         if( h < epsilon )
             return 0.0;
 
@@ -538,13 +568,15 @@ float softShadow( in vec3 p, in vec3 dir, float maxt) {
 void main() {
 
     // Determine where the viewer is looking based on the provided eye position and scene target
-    vec3 dir = ray(2.5, iResolution.xy, gl_FragCoord.xy);
+    vec3 dir = ray(2.0, iResolution.xy, gl_FragCoord.xy);
     vec2 uv = gl_FragCoord.xy / iResolution.xy-0.5;
     uv.x*=iResolution.x/iResolution.y;
     mat3 mat = viewMatrix(target - eyepos, vec3(0.0, 1.0, 0.0));
     vec3 eye = eyepos;
     dir = mat * dir;
     setScene();
+
+    //fragColor = vec4( c , 1. );
     vec3 c = render(eye,dir);
 
     fragColor = vec4(c,1.0);
