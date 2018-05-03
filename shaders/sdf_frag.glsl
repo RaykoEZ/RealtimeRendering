@@ -65,19 +65,19 @@ uniform int shapeType = 0;
 // The following fixed shape parameters are needed as we support lots of shapes.
 // These could be input parameters if needed
 uniform float radius = 1.0;
-uniform vec3 elipsoidRadius = vec3(0.1,0.8,2.5);
+uniform vec3 elipsoidRadius = vec3(0.1,0.45,2.0);
 
 //Constant material values in https://www.shadertoy.com/view/4lB3D1
 const float DENSITY_MIN = 0.1;
 const float DENSITY_MAX = 0.1;
-const vec3 MATERIAL_COLOR = vec3(0.5,0.8,1)*0.1;
+const vec3 MATERIAL_COLOR = vec3(0.5,0.8,1);
 const vec3 AIR_COLOR = vec3(0.5,0.8,1)*0.1;
 
 const vec3 SURFACE_COLOR = vec3(0.8,1.,0.9);
 const float ID_FLOOR = 1.0;
 const float ID_GLASS_WALL = 2.000;
-const float ID_INSIDE = 3.000;
-const float ETA = 0.85;
+const float ID_INSIDE = 0.500;
+const float ETA = 0.45;
 //  Data for raymarching and caustics. Sampled from https://www.shadertoy.com/view/4lB3D1
 struct CP {
     float dist;
@@ -122,8 +122,8 @@ float sdfElipsoid(vec3 p)
 
 vec3 opTwist( vec3 p )
 {
-    float c = cos(0.5*p.y);
-    float s = sin(0.5*p.y);
+    float c = cos(0.6*p.y);
+    float s = sin(0.6*p.y);
     mat2  m = mat2(c,-s,s,c);
     vec3  q = vec3(m*p.xz,p.y);
     return q;
@@ -234,6 +234,7 @@ vec3 sceneIn(in vec3 p) {
 
     }*/
     s = opUnion(s, shape(shapeDir[0] * (p - shapePos[0]),1));
+    s.z = ID_INSIDE;
     //s.x = abs(s.x);
     return s;
 }
@@ -339,7 +340,7 @@ vec3 refractCaustic(vec3 p, vec3 rd, vec3 ld, inout float eta) {
         if (length(cp.p) > 2.) {
             break;
         }
-        cl *= SURFACE_COLOR*(abs(dot(rd, cp.normal)));
+        cl *= SURFACE_COLOR;//*(abs(dot(rd, cp.normal)));
         vec3 normal = sign(dot(rd, cp.normal))*cp.normal;
         rd = refract(rd, -normal, eta);
         eta = 1./eta;
@@ -348,7 +349,7 @@ vec3 refractCaustic(vec3 p, vec3 rd, vec3 ld, inout float eta) {
 
     }
      float d = clamp( dot( rd, ld ), 0.0, 1.0 );
-     return smoothstep(0.99, 1., d)*cl;
+     return smoothstep(0.99, 1.0, d)*cl;
 }
 
 vec3 caustic(vec3 p,vec3 ld, Ray ray) {
@@ -361,8 +362,8 @@ vec3 caustic(vec3 p,vec3 ld, Ray ray) {
 
     for(int i = 0; i < N;++i) {
 
-        float n1 = rand(p.xz*10. + vec2(iTime*2. +float(i)*123.));
-        float n2 = rand(p.xz*15. +vec2(iTime*3. +float(i)*111.));
+        float n1 = rand(p.xz*10. + vec2(2. +float(i)*123.));
+        float n2 = rand(p.xz*15. +vec2(3. +float(i)*111.));
 
         vec3 rd = ld+(VX*(n1-0.5)+VY*(n2-0.5))*0.1;
         //rd = ld;
@@ -381,13 +382,16 @@ vec3 getFloorColor(in Ray ray) {
     vec3 col = vec3(0);
     vec3 pos = ray.cp.p;
     vec3 ref = reflect( ray.rd, ray.cp.normal );
-
+    // Checkerboard map
     float f = mod( floor(5.0*pos.z) + floor(5.0*pos.x), 2.0);
     col = 0.4 + 0.1*f*vec3(1.0);
-    //let direction of light be normal of surface point
-    //vec3 LIGHT_DIR = normalize(vec3(pos-Light.Position.xyz));
-    vec3 LIGHT_DIR = normalize(vec3(-0.6,0.7,-0.3));
+    vec3 LIGHT_DIR = normalize(vec3(-0.3,1.5,-0.1));
     float dif = clamp( dot( ray.cp.normal, LIGHT_DIR ), 0.0, 1.0 );
+    // if ray reaches the stuff inside the marble, do a different colour
+    if(ray.cp.mat == ID_INSIDE)
+    {
+      return 1.20*dif+vec3(0.1,0.2,1.0);
+    }
     vec3 brdf = vec3(0.0);
     brdf += caustic(pos, LIGHT_DIR, ray);
     brdf += 1.20*dif*vec3(1.00,0.90,0.60);
@@ -426,14 +430,14 @@ void getRays(inout Ray ray, out Ray r1, out Ray r2) {
     float cs = dot(ray.cp.normal, ray.rd);
     // simple approximation
     float fresnel = 1.0-abs(cs);
-//	fresnel = mix(0.1, 1., 1.0-abs(cs));
+    //fresnel = mix(0.1, 1., 1.0-abs(cs));
     float r = ray.cp.mat - ID_FLOOR;
     vec3 normal = sign(cs)*ray.cp.normal;
     vec3 refr = refract(ray.rd, -normal, ray.eta);
     vec3 refl = reflect(ray.rd, ray.cp.normal);
     vec3 z = normal*epsilon*2.;
     p += z;
-    r1 = Ray(refr, findIntersectionIn(p, refr),  vec3(0),(1.-fresnel)*r, 1./ray.eta);
+    r1 = Ray(refr, findIntersectionIn(p, refr),  vec3(0.2,0.3,0.9),(1.-fresnel)*r, 1./ray.eta);
     p -= 2.*z;
     r2 = Ray( refl, findIntersection(p, refl), vec3(0),r*fresnel, ray.eta);
 }
