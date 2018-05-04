@@ -273,7 +273,7 @@ float sceneWithoutGround(vec3 p) {
   * quite generic and was originally taken from (and explained rather well) here:
   * http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
   */
-float march(vec3 eye, vec3 dir) {
+float depthMarch(vec3 eye, vec3 dir) {
     float depth = 0.0;
     for (int i = 0; i < marchIter; ++i) {
         float dist = sceneOut(eye + depth * dir).x;
@@ -330,7 +330,7 @@ CP findIntersectionIn(inout vec3 p, inout vec3 rd) {
 }
 //-------------------------------------------------------------------------------
 
-
+float shadowFactor(vec3 p, vec3 n);
 vec3 refractCaustic(vec3 p, vec3 rd, vec3 ld, inout float eta) {
 
     vec3 cl = vec3(1);
@@ -340,8 +340,11 @@ vec3 refractCaustic(vec3 p, vec3 rd, vec3 ld, inout float eta) {
         if (length(cp.p) > 2.) {
             break;
         }
-        cl *= SURFACE_COLOR;//*(abs(dot(rd, cp.normal)));
+
+
         vec3 normal = sign(dot(rd, cp.normal))*cp.normal;
+        float shadow = shadowFactor(p,normal);
+        cl *= SURFACE_COLOR;//*(abs(dot(rd, cp.normal)));
         rd = refract(rd, -normal, eta);
         eta = 1./eta;
         p = cp.p;
@@ -376,6 +379,7 @@ vec3 caustic(vec3 p,vec3 ld, Ray ray) {
     return c*5./float(N);
 }
 
+
 // lightning is based on https://www.shadertoy.com/view/Xds3zN
 vec3 getFloorColor(in Ray ray) {
 
@@ -390,7 +394,7 @@ vec3 getFloorColor(in Ray ray) {
     // if ray reaches the stuff inside the marble, do a different colour
     if(ray.cp.mat == ID_INSIDE)
     {
-      return 1.20*dif+vec3(0.1,0.2,1.0);
+      return 1.20*dif+vec3(0.05,0.1,1.0);
     }
     vec3 brdf = vec3(0.0);
     brdf += caustic(pos, LIGHT_DIR, ray);
@@ -489,25 +493,6 @@ vec3 render(vec3 p, vec3 rd) {
     return col;
 }
 
-/** This is an implementation of ambient occlusion method for SDF scenes, 
-  * described here: http://iquilezles.org/www/material/nvscene2008/rwwtt.pdf .
-  * Note this is considerably faster than the method implemented here: https://www.shadertoy.com/view/XlXyD4
-  * but also demonstrates better quality for most shapes tested. Not sure why this other method is used.
-  */
-float ao(vec3 p, vec3 n) {
-    float sum = 0.0;
-    float factor = 1.0;
-    float depthInc = aoDist / (aoIter+1);
-    float depth = depthInc;
-    float constK = 0.5; // Not sure what this needs to be, but 0.5 seems to work
-
-    for (int i = 0; i < aoIter; ++i) {
-        sum += factor * (depth - sceneOut(p+n*depth)) / depth;
-        factor *= 0.5;
-        depth += depthInc;
-    }
-    return 1.0 -  constK * max(sum, 0.0);
-}
 
 
 
@@ -540,18 +525,27 @@ mat3 alignMatrix(vec3 dir) {
     return mat3(u, s, f);
 }*/
 
-// From http://www.iquilezles.org/www/articles/rmshadows/rmshadows.htm
-float hardShadow( in vec3 p, in vec3 dir, in float maxt) {
-    int iter = 0;
-    float t=epsilon;
-    for(; (t < maxt) && (iter < shadowIter); ++iter) {
-        float dist = sceneOut(p + dir*t).x;
-        if( dist < epsilon )
-            return 0.0;
-        t += dist;
+/** This is an implementation of ambient occlusion method for SDF scenes,
+  * described here: http://iquilezles.org/www/material/nvscene2008/rwwtt.pdf .
+  * Note this is considerably faster than the method implemented here: https://www.shadertoy.com/view/XlXyD4
+  * but also demonstrates better quality for most shapes tested. Not sure why this other method is used.
+  */
+float ao(vec3 p, vec3 n) {
+    float sum = 0.0;
+    float factor = 1.0;
+    float depthInc = aoDist / (aoIter+1);
+    float depth = depthInc;
+    float constK = 0.5; // Not sure what this needs to be, but 0.5 seems to work
+
+    for (int i = 0; i < aoIter; ++i) {
+        sum += factor * (depth - sceneOut(p+n*depth).x) / depth;
+        factor *= 0.5;
+        depth += depthInc;
     }
-    return 1.0;
+    return 1.0 -  constK * max(sum, 0.0);
 }
+
+// From http://www.iquilezles.org/www/articles/rmshadows/rmshadows.htm
 float softShadow( in vec3 p, in vec3 dir, float maxt) {
     float res = 1.0;
     float t = epsilon;
@@ -560,6 +554,7 @@ float softShadow( in vec3 p, in vec3 dir, float maxt) {
     for( ; (t < maxt) && (iter < shadowIter); ++iter )
     {
         float h = sceneOut(p + dir*t).x;
+
         if( h < epsilon )
             return 0.0;
 
@@ -568,6 +563,67 @@ float softShadow( in vec3 p, in vec3 dir, float maxt) {
     }
     return res;
 }
+
+// from: Richard Southern's rendering example - SDF with microfacets and softshadow
+
+// returns spec factor and NdotL
+vec2 specular(vec3 p, vec3 n, vec3 dir,float depth)
+{
+
+  //get direction vector from point to light and to eye
+  vec3 pointToLight = Light.Position.xyz - p;
+  vec3 pointToEye = eyepos - p;
+
+  // Calculate the light and view vectors s and v respectively, along with the reflection vector
+  vec3 s = normalize(pointToLight);
+  vec3 v = normalize(pointToEye);
+  vec3 r = reflect( -s, n );
+
+  // Precompute the dot products
+  vec3 h = normalize(s + v);
+  float NdotL = max(dot(n, s), 0.0);
+  float NdotV = max(dot(n, v), 0.0);
+  float NdotH = max(dot(n, h), 0.0);
+  float VdotH = max(dot(v, h), 0.0);
+
+  float specular = 0.0;
+
+  if (NdotL > 0.0) {
+      float mSquared = roughnessValue * roughnessValue;
+
+      // geometric attenuation
+      float NH2 = 2.0 * NdotH;
+      float invVdotH = 1.0 / VdotH;
+      float g1 = (NH2 * NdotV) * invVdotH;
+      float g2 = (NH2 * NdotL) * invVdotH;
+      float geoAtt = min(1.0, min(g1, g2));
+
+      // roughness (or: microfacet distribution function)
+      // beckmann distribution function
+      float r1 = 1.0 / ( 4.0 * mSquared * pow(NdotH, 4.0));
+      float r2 = (NdotH * NdotH - 1.0) / (mSquared * NdotH * NdotH);
+      float roughness = r1 * exp(r2);
+
+      // fresnel
+      // Schlick approximation
+      float fresnel = pow(1.0 - VdotH, 5.0);
+      fresnel *= (1.0 - F0);
+      fresnel += F0;
+      specular = max(0.0, (fresnel * geoAtt * roughness) / (NdotV * NdotL * 3.14));
+  }
+
+  return vec2(specular,NdotL);
+}
+
+float shadowFactor(vec3 p, vec3 n)
+{
+  vec3 pointToLight = Light.Position.xyz - p;
+  vec3 s = normalize(pointToLight);
+  float distToLight = length(Light.Position.xyz - p);
+  float shadowFactor = softShadow(p + n*epsilon, s, distToLight);
+  return shadowFactor;
+}
+
 
 void main() {
 
@@ -580,17 +636,26 @@ void main() {
     dir = mat * dir;
     setScene();
 
+    // getting values for specular
+    float depth = depthMarch(eyepos,dir);
+    vec3 p = eye + depth * dir;
+    vec3 n = normalOut(p);
+
+    //get specular with NdotL, shadow and ambient
+    vec2 spec = specular(p,n,dir,depth);
+    float shadow = shadowFactor(p,n);
+    float ao = ao(p,n);
     //fragColor = vec4( c , 1. );
     vec3 c = render(eye,dir);
 
-    fragColor = vec4(c,1.0);
+    fragColor = vec4(0.5*ao*shadow*(Light.Ld * spec.y + Light.Ls * spec.x)+c,1.0);
 
     /*
     // Initialise the scene based on the current elapsed time
     setScene();
     
     // March until it hits the object. The depth indicates how far you have to travel down dir to get to the object.
-    float depth = march(eye, dir);
+    float depth = depthMarch(eye, dir);
     if (depth >= marchDist - epsilon) {
         fragColor = vec4(depth);
 		return;
