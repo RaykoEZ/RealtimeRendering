@@ -43,9 +43,9 @@ uniform LightInfo Light = LightInfo(
             );
 
 // set important material values
-uniform float roughnessValue = 0.1; // 0 : smooth, 1: rough
-uniform float F0 = 0.5; // fresnel reflectance at normal incidence
-uniform float k = 0.5;  // fraction of diffuse reflection (specular reflection = 1 - k)
+uniform float roughnessValue = 0.045; // 0 : smooth, 1: rough
+uniform float F0 = 1.0; // fresnel reflectance at normal incidence
+//uniform float k = 0.5;  // fraction of diffuse reflection (specular reflection = 1 - k)
 
 // Cosine based palette from http://iquilezles.org/www/articles/palettes/palettes.htm
 uniform vec3 ColorPalette[4] = vec3[](vec3(0.5, 0.5, 0.5), vec3(0.5, 0.5, 0.5), vec3(1.0, 1.0, 1.0), vec3(0.00, 0.10, 0.20));
@@ -64,20 +64,20 @@ uniform int shapeType = 0;
 
 // The following fixed shape parameters are needed as we support lots of shapes.
 // These could be input parameters if needed
-uniform float radius = 1.0;
-uniform vec3 elipsoidRadius = vec3(0.1,0.45,2.0);
+uniform float radius = 0.9;
+uniform vec3 elipsoidRadius = vec3(0.1,0.45,1.1);
 
 //Constant material values in https://www.shadertoy.com/view/4lB3D1
 const float DENSITY_MIN = 0.1;
 const float DENSITY_MAX = 0.1;
-const vec3 MATERIAL_COLOR = vec3(0.5,0.8,1);
+const vec3 MATERIAL_COLOR = vec3(0.4,0.7,1);
 const vec3 AIR_COLOR = vec3(0.5,0.8,1)*0.1;
 
 const vec3 SURFACE_COLOR = vec3(0.8,1.,0.9);
 const float ID_FLOOR = 1.0;
 const float ID_GLASS_WALL = 2.000;
 const float ID_INSIDE = 0.500;
-const float ETA = 0.45;
+const float ETA = 0.4;
 //  Data for raymarching and caustics. Sampled from https://www.shadertoy.com/view/4lB3D1
 struct CP {
     float dist;
@@ -159,6 +159,7 @@ vec3 shape(vec3 p, int type) {
 
         case 1:
             q = opTwist(p);
+
             //twist elipsoid, scaled with
             float scale = 0.3;
             return vec3(scale*sdfElipsoid(q/scale),ID_INSIDE,ETA);
@@ -178,7 +179,7 @@ void setShape(float index, out vec3 shapePos, out mat3 shapeDir) {
     float t = tau * mod(index * 0.2 + 0.02 * iTime + 0.12, 1.0);
     float a = 0.0;
     float b = 3.0 ;
-    float c = 7.0 ;
+    float c = 7.0 *t;
     shapePos = vec3(1.8 * cos(b),  1.0 + sin(a), 1.8 * cos(c));
     shapeDir = mat3(cos(a), -sin(a), 0.0, sin(a), cos(a), 0.0, 0.0, 0.0, 1.0);
     shapeDir *= mat3(cos(b), 0.0, -sin(b), 0.0, 1.0, 0.0, sin(b), 0.0, cos(b));
@@ -332,7 +333,7 @@ CP findIntersectionIn(inout vec3 p, inout vec3 rd) {
 
     p += rd * depth;
     // calculate normal in the father point to avoid artifacts
-    vec3 n = normalOut(p-rd*(epsilon-dist.x));
+    vec3 n = normalIn(p-rd*(epsilon-dist.x));
     CP cp;
     cp = CP(depth, n, dist.y, p);
 
@@ -340,21 +341,20 @@ CP findIntersectionIn(inout vec3 p, inout vec3 rd) {
 }
 //-------------------------------------------------------------------------------
 
-float shadowFactor(vec3 p, vec3 n);
 vec3 refractCaustic(vec3 p, vec3 rd, vec3 ld, inout float eta) {
 
     vec3 cl = vec3(1);
     for(int j = 0; j < 2; ++j) {
 
-        CP cp = findIntersection(p, rd);
+        // call march function for refraction checks
+        CP cp = findIntersectionIn(p, rd);
         if (length(cp.p) > 2.) {
             break;
         }
 
-
         vec3 normal = sign(dot(rd, cp.normal))*cp.normal;
-        float shadow = shadowFactor(p,normal);
-        //cl *= mix(SURFACE_COLOR,vec3(shadow),vec3(0.5,0.5,0.5));//*(abs(dot(rd, cp.normal)));
+
+        //cl *= SURFACE_COLOR;//(abs(dot(rd, cp.normal)));
         rd = refract(rd, -normal, eta);
         eta = 1./eta;
         p = cp.p;
@@ -382,8 +382,8 @@ vec3 caustic(vec3 p,vec3 ld, Ray ray) {
         //rd = ld;
         rd = normalize(rd);
 
-        vec3 cl = refractCaustic(p, rd, ld, ray.eta);
-
+        vec3 cl;
+        cl = refractCaustic(p, rd, ld, ray.eta);
         c += cl* dot(rd,ray.cp.normal);
     }
     return c*5./float(N);
@@ -409,7 +409,7 @@ vec3 getFloorColor(in Ray ray) {
     }
     vec3 brdf = vec3(0.0);
     brdf += caustic(pos, LIGHT_DIR, ray);
-    brdf += 1.20*dif*vec3(1.00,0.90,0.60);
+    brdf += 1.2*dif*vec3(1.00,0.90,0.60);
     col = col*brdf;
     // exclude branching
     col *= (ID_GLASS_WALL-ray.cp.mat);
@@ -557,26 +557,63 @@ float ao(vec3 p, vec3 n) {
 }
 
 // From http://www.iquilezles.org/www/articles/rmshadows/rmshadows.htm
-float softShadow( in vec3 p, in vec3 dir, float maxt) {
-    float res = 1.0;
+vec3 softShadow( in vec3 p, in vec3 dir, float maxt) {
+    vec3 res = vec3(1.0);
     float t = epsilon;
-    float k = 8.0; // This determines the size of the penumbra (bigger is softer)
+    float brightness = 1.3;
+    float k =7.0; // This determines the size of the penumbra (bigger is softer)
     int iter = 0;
+    float lastT;
+    // call march function for refraction checks
+    vec3 shadowCol = castRay(p,dir);
     for( ; (t < maxt) && (iter < shadowIter); ++iter )
     {
-        float h = sceneOut(p + dir*t).x;
 
+        float h = sceneIn(p + dir*t).x;
+
+        // solid shadow region
         if( h < epsilon )
         {
-            return 0.0;
+            // trace against for shadow caustics
+            //return vec3(0);
+            return mix(vec3(0),(brightness/t)*shadowCol,1-ETA);
+        }
+
+        res = min( res, vec3(((k*h)/t)) );
+        t += h;
+        lastT=t;
+    }
+
+    return (brightness-1)*normalize(res*shadowCol);
+}
+vec3 softShadowIn( in vec3 p, in vec3 dir, float maxt) {
+    float res = 1.0;
+    float t = epsilon;
+    float k =7.0; // This determines the size of the penumbra (bigger is softer)
+
+    int iter = 0;
+
+    // call march function for refraction checks
+    vec3 shadowCol = castRay(p,dir);
+    for( ; (t < maxt) && (iter < shadowIter); ++iter )
+    {
+
+        float h = sceneOut(p + dir*t).x;
+
+        // solid shadow region
+        if( h < epsilon )
+        {
+            // trace against for shadow caustics
+
+            return 3.0*mix(vec3(0),t*shadowCol,ETA);
         }
 
         res = min( res, (k*h)/t );
         t += h;
-    }
-    return res;
-}
 
+    }
+    return mix(vec3(res),shadowCol,1-ETA);
+}
 // from: Richard Southern's rendering example - SDF with microfacets and softshadow
 
 // returns spec factor and NdotL
@@ -627,15 +664,24 @@ vec2 specular(vec3 p, vec3 n, vec3 dir,float depth)
   return vec2(specular,NdotL);
 }
 
-float shadowFactor(vec3 p, vec3 n)
+vec3 shadowFactor(vec3 p, vec3 n, bool outOrIn)
 {
-  vec3 pointToLight = Light.Position.xyz - p;
-  vec3 s = normalize(pointToLight);
-  float distToLight = length(Light.Position.xyz - p);
-  float shadowFactor = softShadow(p + n*epsilon, s, distToLight);
-  return shadowFactor;
-}
+    vec3 pointToLight = Light.Position.xyz - p;
+    vec3 s = normalize(pointToLight);
+    float distToLight = length(Light.Position.xyz - p);
+    vec3 shadowFactor;
+    float eta = ETA;
+    //if you want shadow on the outside, have true
+    if(outOrIn)
+    {
+        shadowFactor = softShadow(p + n*epsilon, s, distToLight);
 
+        return shadowFactor;
+    }
+    shadowFactor = softShadowIn(p + n*epsilon, s, distToLight);
+
+    return shadowFactor;
+}
 
 void main() {
 
@@ -663,14 +709,19 @@ void main() {
     vec2 specIn = specular(pIn,nIn,dir,depthIn);
 
 
+    vec3 shadowOut = shadowFactor(pOut,nOut,true);
+    vec3 shadowIn = shadowFactor(pIn,nIn,false);
+    float aoOut = ao(pOut,nOut);
+    float aoIn = ao(pIn,nIn);
+    vec3 c;
 
-    float shadow = shadowFactor(pIn,nIn);
-    float ao = ao(pIn,nIn);
-    vec3 c = render(eye,dir);
 
-    float NdotLOverall = specIn.y;//mix(specIn.y,specOut.y,0.5);
-    float specOverall = specIn.x;//mix(specIn.x,specOut.x,0.5);
+    c  = render(eye,dir);
 
-    fragColor = vec4(0.5*ao*shadow*(Light.Ld * NdotLOverall + Light.Ls * specOverall)+c,1.0);
+    vec3 outFactor = vec3(0.45*aoOut*shadowOut*(Light.Ld * specOut.y + Light.Ls * specOut.x));
+    vec3 inFactor = vec3(0.3*shadowIn*aoIn*(Light.Ld * specIn.y + Light.Ls * specIn.x));
+
+    float ratio = 1-ETA;
+    fragColor = vec4(mix(inFactor,outFactor,vec3(ratio,ratio,ratio))+c,1.0);
 
 }
