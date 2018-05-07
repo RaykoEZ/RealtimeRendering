@@ -33,6 +33,8 @@ public:
     void setMouseX(const double &_x){ m_mouseX = _x;}
     void setMouseY(const double &_y){ m_mouseY = _y;}
 private:
+
+    GLuint m_glossTex,m_envTex;
     /// Keep track of the last time
     std::chrono::high_resolution_clock::time_point m_startTime;
 
@@ -44,6 +46,17 @@ private:
     double m_mouseX = 0.0, m_mouseY = 0.0;
     /// Sets the target and eye position on the shader
     glm::vec3 m_eye, m_target;
+
+    /// Initialise a texture with the given texUnit
+    void initTexture(const GLint &texUnit, GLuint &texId, const char *filename);
+
+    /// Initialise our Environment Texture Maps
+    void initEnvironment(const GLint& texUnit);
+
+    /// Initialise a single side of our environment map
+    void initEnvironmentSide(GLenum target, const char *filename);
+
+
 };
 
 #endif // SDFSCENE_H

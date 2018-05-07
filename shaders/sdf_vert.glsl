@@ -10,12 +10,11 @@ layout (location=1) in vec2 VertexUV;
 uniform mat4 MVP;
 
 // Pass through the UV coordinates
-out vec2 FragmentUV; 
+smooth out vec2 FragmentUV;
 
 void main() {
     // Pass through the vertex UV's to be interpolated through rasterizations
     FragmentUV = VertexUV;
-
     // Set the position of the current vertex
     gl_Position = MVP * vec4(VertexPosition, 1.0);
 }

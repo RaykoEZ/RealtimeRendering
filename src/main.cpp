@@ -120,7 +120,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
     // Create our window in a platform agnostic manner
-    int width = 1024; int height = 768;
+    int width = 1280; int height = 720;
     GLFWwindow* window = glfwCreateWindow(width, // width 
                                           height, // height
                                           "My Title", // title 
