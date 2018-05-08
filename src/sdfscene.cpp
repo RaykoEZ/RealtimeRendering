@@ -7,7 +7,7 @@
 #include <ngl/NGLInit.h>
 #include <ngl/VAOPrimitives.h>
 #include <ngl/ShaderLib.h>
-#include <NGL/Image.h>
+#include <ngl/Image.h>
 
 SDFScene::SDFScene() : Scene() {
     // Set the time since we started running the scene

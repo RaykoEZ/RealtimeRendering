@@ -28,9 +28,9 @@ HEADERS+= $$PWD/include/camera.h \
           $$PWD/include/scene.h \
           $$PWD/include/sdfscene.h \
           $$PWD/include/trackballcamera.h \
-          $$PWD/include/glinclude.h \
+          $$PWD/include/glinclude.h
 # and add the include dir into the search path for Qt and make
-INCLUDEPATH +=./include
+INCLUDEPATH += ./include
 win32:
 {
     # GLM AT HOME
