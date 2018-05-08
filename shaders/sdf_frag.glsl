@@ -192,7 +192,7 @@ void setShape(float index, out vec3 shapePos, out mat3 shapeDir) {
     float t = tau * mod(index * 0.2 + 0.02 * iTime + 0.12, 1.0);
     float a = 0.0;
     float b = 3.0 ;
-    float c = 5.0*t;
+    float c = 5.0;
     shapePos = vec3(1.8 * cos(b),  1.0 + sin(a), 1.8 * cos(c));
     shapeDir = mat3(cos(a), -sin(a), 0.0, sin(a), cos(a), 0.0, 0.0, 0.0, 1.0);
     shapeDir *= mat3(cos(b), 0.0, -sin(b), 0.0, 1.0, 0.0, sin(b), 0.0, cos(b));
@@ -412,7 +412,7 @@ vec3 getColor(in Ray ray) {
 
     vec3 c2 = getFloorColor(ray);
     // exclude branching
-    return mix(c2, c1, ray.cp.mat-ID_FLOOR)+1.8*mix(factor.inF,factor.outF,(ray.eta - ETA)/(1./ETA-ETA));
+    return mix(c2, c1, ray.cp.mat-ID_FLOOR)+2.0*mix(factor.inF,factor.outF,(ray.eta - ETA)/(1./ETA-ETA));
 
 }
 
