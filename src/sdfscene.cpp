@@ -9,6 +9,8 @@
 #include <ngl/ShaderLib.h>
 #include <ngl/Image.h>
 
+// most of the setup are from Richard Southern's rendering_examples
+
 SDFScene::SDFScene() : Scene() {
     // Set the time since we started running the scene
     m_startTime = std::chrono::high_resolution_clock::now();

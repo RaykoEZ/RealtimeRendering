@@ -177,14 +177,6 @@ vec3 shape(vec3 p, int type) {
     }
 }
 
-
-// polynomial smooth min (k = 0.1) from http://iquilezles.org/www/articles/smin/smin.htm
-// the bigger the k, the bigger the region of smoothing
-float smin( float a, float b, float k ) {
-    float h = clamp( 0.5*(1.0+(b-a)/k), 0.0, 1.0 );
-    return mix( b, a, h ) - k*h*(1.0-h);
-}
-
 /** The rotation of the shapes was taken from here https://www.shadertoy.com/view/XlXyD4 and forms the basis of
   * the application.
   */
@@ -330,9 +322,9 @@ CP findIntersectionIn(inout vec3 p, inout vec3 rd) {
 vec3 refractCaustic(vec3 p, vec3 rd, vec3 ld, inout float eta) {
 
     vec3 cl = vec3(1);
-    vec3 normal;
+    //vec3 normal;
     //noisy shadow, ignore for now
-    for(int j = 0; j < 2; ++j) {
+    /*for(int j = 0; j < 2; ++j) {
 
         // call march function for refraction checks
         CP cp = findIntersectionIn(p, rd);
@@ -347,6 +339,7 @@ vec3 refractCaustic(vec3 p, vec3 rd, vec3 ld, inout float eta) {
         p += normal*epsilon*2.;
 
     }
+    */
      //cl += normal*5 *mix(factor.inF,factor.outF,ETA);//mix(factor.outF,factor.inF,1-ETA)*(abs(dot(rd, cp.normal)));
      float d = clamp( dot( rd, ld ), 0.0, 1.0 );
      return smoothstep(0.9, 1.0, d)*cl;
@@ -380,7 +373,7 @@ vec3 getFloorColor(in Ray ray) {
 
     vec3 col = vec3(0);
     vec3 pos = ray.cp.p;
-    vec3 ref = reflect( ray.rd, ray.cp.normal );
+    //vec3 ref = reflect( ray.rd, ray.cp.normal );
     // Checkerboard map
     float f = mod( floor(5.0*pos.z) + floor(5.0*pos.x), 2.0);
     col = 0.4 + 0.1*f*vec3(1.0);
